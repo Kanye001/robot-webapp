@@ -1,0 +1,151 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Robot Web3 App (single-file)</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    button { margin: 6px; padding: 8px 12px; }
+    input { padding: 6px; margin-right:8px; width:140px; }
+    .small { font-size: 13px; color: #555; }
+    .box { border:1px solid #ddd; padding:12px; margin:10px 0; border-radius:8px; max-width:720px; }
+  </style>
+</head>
+<body>
+  <h1>Robot Web3 App</h1>
+  <div id="root">Loading…</div>
+
+  <!-- React + ReactDOM (UMD) -->
+  <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+  <!-- Babel so we can use JSX inside this file -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Ethers (UMD) -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+
+  <!-- APP CODE - single file, ready to use -->
+  <script type="text/babel">
+    const { useState } = React;
+    const ethersLib = window.ethers;
+
+    // PUT YOUR CONTRACT ADDRESSES HERE (already filled from your earlier message)
+    const TOKEN_ADDRESS = "0x617A47F0F6Af0bd18aFb8B1b27B0E1cF8d1427D2";
+    const NFT_ADDRESS   = "0x7C2b4E736d32961e269F380D203541a44637e719";
+
+    // Minimal ABIs - only the functions we call
+    const tokenABI = [
+      { "inputs":[{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"mint","outputs":[],"stateMutability":"nonpayable","type":"function"},
+      { "inputs":[{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"burn","outputs":[],"stateMutability":"nonpayable","type":"function"},
+      { "inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}
+    ];
+    const nftABI = [
+      { "inputs":[{"internalType":"address","name":"recipient","type":"address"}],"name":"mintNFT","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"nonpayable","type":"function"}
+    ];
+
+    function App(){
+      const [account, setAccount] = useState("");
+      const [amount, setAmount] = useState("");
+      const [status, setStatus] = useState("Ready");
+
+      async function connectWallet(){
+        if(!window.ethereum){ alert("Install MetaMask and switch it to Sepolia"); return; }
+        try{
+          const accs = await window.ethereum.request({ method: "eth_requestAccounts" });
+          setAccount(accs[0]);
+          setStatus("Wallet connected");
+        }catch(e){ alert("Could not connect wallet: " + e.message); }
+      }
+
+      async function mintToken(){
+        if(!account){ alert("Connect wallet first"); return; }
+        if(!amount){ alert("Type an amount"); return; }
+        try{
+          setStatus("Sending mint tx...");
+          const provider = new ethersLib.providers.Web3Provider(window.ethereum);
+          const signer = provider.getSigner();
+          const contract = new ethersLib.Contract(TOKEN_ADDRESS, tokenABI, signer);
+          // mint expects raw integer amount (we used token with decimals 18), so convert
+          const tx = await contract.mint(ethersLib.utils.parseUnits(amount.toString(), 18));
+          await tx.wait();
+          setStatus("Minted " + amount);
+        }catch(e){
+          setStatus("Error: " + (e.message || e));
+        }
+      }
+
+      async function burnToken(){
+        if(!account){ alert("Connect wallet first"); return; }
+        if(!amount){ alert("Type an amount"); return; }
+        try{
+          setStatus("Sending burn tx...");
+          const provider = new ethersLib.providers.Web3Provider(window.ethereum);
+          const signer = provider.getSigner();
+          const contract = new ethersLib.Contract(TOKEN_ADDRESS, tokenABI, signer);
+          const tx = await contract.burn(ethersLib.utils.parseUnits(amount.toString(), 18));
+          await tx.wait();
+          setStatus("Burned " + amount);
+        }catch(e){
+          setStatus("Error: " + (e.message || e));
+        }
+      }
+
+      async function mintNFT(){
+        if(!account){ alert("Connect wallet first"); return; }
+        try{
+          setStatus("Sending NFT mint tx...");
+          const provider = new ethersLib.providers.Web3Provider(window.ethereum);
+          const signer = provider.getSigner();
+          const contract = new ethersLib.Contract(NFT_ADDRESS, nftABI, signer);
+          const tx = await contract.mintNFT(account);
+          await tx.wait();
+          setStatus("NFT minted to " + account);
+        }catch(e){
+          setStatus("Error: " + (e.message || e));
+        }
+      }
+
+      async function checkMyTokenBalance(){
+        if(!account){ alert("Connect wallet first"); return; }
+        try{
+          setStatus("Checking balance...");
+          const provider = new ethersLib.providers.Web3Provider(window.ethereum);
+          const contract = new ethersLib.Contract(TOKEN_ADDRESS, tokenABI, provider);
+          const bal = await contract.balanceOf(account);
+          // convert from wei (decimals 18)
+          const human = ethersLib.utils.formatUnits(bal, 18);
+          setStatus("Balance: " + human);
+        }catch(e){
+          setStatus("Error: " + (e.message || e));
+        }
+      }
+
+      return (
+        <div>
+          <div className="box">
+            <div className="small">Account: {account || "not connected"}</div>
+            <button onClick={connectWallet}>{account ? "Reconnect Wallet" : "Connect Wallet"}</button>
+          </div>
+
+          <div className="box">
+            <h3>RobotCoin (mint & burn)</h3>
+            <input placeholder="amount (e.g. 10)" value={amount} onChange={e=>setAmount(e.target.value)} />
+            <button onClick={mintToken}>Mint tokens</button>
+            <button onClick={burnToken}>Burn tokens</button>
+            <button onClick={checkMyTokenBalance}>Check my token balance</button>
+          </div>
+
+          <div className="box">
+            <h3>RobotNFT</h3>
+            <button onClick={mintNFT}>Mint one NFT to my address</button>
+          </div>
+
+          <div className="box small">Status: {status}</div>
+          <div className="small">Make sure MetaMask is set to <b>Sepolia</b>.</div>
+        </div>
+      );
+    }
+
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
+</body>
+</html>
